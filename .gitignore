@@ -3,3 +3,6 @@
 .Rdata
 .httr-oauth
 .DS_Store
+prcs_migration_extract.xml
+prcs_migration_extract.dat.gz
+*.html

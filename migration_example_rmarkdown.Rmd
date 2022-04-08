@@ -16,9 +16,26 @@ suppressPackageStartupMessages({
 })
 ```
 
-```{r load-data, eval=FALSE}
-ddi <- read_ipums_ddi("usa_00014.xml")
-data <- read_ipums_micro(ddi, verbose = FALSE)
+```{r load-data}
+if (!file.exists("prcs_migration_extract.xml")) {
+  # Load extract definition from JSON
+  prcs_migration_extract <- define_extract_from_json(
+    "prcs_migration_extract.json",
+    "usa"
+  )
+  # Submit, wait for, and download extract
+  ddi_filename <- submit_extract(prcs_migration_extract) %>% 
+    wait_for_extract() %>% 
+    download_extract() %>% 
+    basename()
+  # Infer data file name from DDI file name
+  data_filename <- str_replace(ddi_filename, "\\.xml$", ".dat.gz")
+  # Standardize DDI and data file names #<<
+  file.rename(ddi_filename, "prcs_migration_extract.xml") #<<
+  file.rename(data_filename, "prcs_migration_extract.dat.gz") #<<
+}
+ddi <- read_ipums_ddi("prcs_migration_extract.xml")
+data <- read_ipums_micro(ddi, data_file = "prcs_migration_extract.dat.gz")
 ```
 
 ```{r prep-data}
@@ -60,7 +77,13 @@ data <- data %>%
 
 # Prep migration variable
 data <- data %>% 
-  mutate(moved_in_last_year = MIGRATE1 %in% 2:4)
+  mutate(
+    moved_in_last_year = case_when(
+      MIGRATE1 %in% c(0, 9) ~ NA, 
+      MIGRATE1 == 1 ~ FALSE, 
+      MIGRATE1 %in% 2:4 ~ TRUE
+    )
+  )
 
 
 # Prep age variable
@@ -94,6 +117,7 @@ point estimates, follow the
 
 ```{r migration-graph-1, dpi=300, fig.height=5, fig.width=8, echo = FALSE}
 data %>% 
+  filter(!is.na(moved_in_last_year)) %>% 
   group_by(YEAR) %>% 
   summarize(
     pct_moved = 100 * sum(PERWT[moved_in_last_year]) / sum(PERWT)
@@ -111,6 +135,7 @@ data %>%
 
 ```{r migration-graph-2, dpi=300, fig.height=5, fig.width=8, echo = FALSE}
 data %>% 
+  filter(!is.na(moved_in_last_year)) %>% 
   filter(AGE >= 25) %>%
   group_by(YEAR, EDUCD3) %>% 
   summarize(
@@ -132,6 +157,7 @@ data %>%
 
 ```{r migration-graph-3, dpi=300, fig.height=5, fig.width=8, echo = FALSE}
 data %>% 
+  filter(!is.na(moved_in_last_year)) %>% 
   filter(!is.na(hhincome_quintile)) %>% 
   group_by(YEAR, hhincome_quintile) %>% 
   summarize(
@@ -153,6 +179,7 @@ data %>%
 
 ```{r migration-graph-4, dpi=300, fig.height=5, fig.width=8, echo = FALSE}
 data %>% 
+  filter(!is.na(moved_in_last_year)) %>% 
   group_by(YEAR, age_group) %>% 
   summarize(
     pct_moved = 100 * sum(PERWT[moved_in_last_year]) / sum(PERWT),
